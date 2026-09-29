@@ -209,66 +209,245 @@ Objective:
 - Review and implement PointTransaction audit ledger for double-entry point accounting.
 - Author comprehensive schema validation tests and verify 100% test pass.
 
-Files Created or Modified:
-- [CREATED] D:\kudos-wall\backend\src\config\constants.js (Centralized departments, tags, reactions, badges, tiers)
-- [CREATED] D:\kudos-wall\backend\src\models\User.js (User schema with wallet, bcrypt hashing, tokens, sanitization)
-- [CREATED] D:\kudos-wall\backend\src\models\Kudos.js (Kudos schema with points, anti-self-gift hook, value tags)
-- [CREATED] D:\kudos-wall\backend\src\models\Reaction.js (Emoji reaction schema with compound unique constraint)
-- [CREATED] D:\kudos-wall\backend\src\models\RefreshToken.js (SHA-256 hashed rotating tokens with TTL index)
-- [CREATED] D:\kudos-wall\backend\src\models\Badge.js (Recognition badges with categories, codes, and bonuses)
-- [CREATED] D:\kudos-wall\backend\src\models\UserBadge.js (User earned badge junction with unique compound index)
-- [CREATED] D:\kudos-wall\backend\src\models\PointTransaction.js (Double-entry audit ledger for point economy)
-- [CREATED] D:\kudos-wall\backend\src\models\index.js (Unified model exports)
-- [CREATED] D:\kudos-wall\backend\tests\models.test.js (Comprehensive unit & integration test suite)
-- [UPDATED] D:\kudos-wall\backend\package.json (Added bcryptjs dependency)
+Detailed Model Specifications:
+
+1. User Model (D:\kudos-wall\backend\src\models\User.js):
+   - Schema Fields & Defaults:
+     * name: String, required, trim, minlength 2, maxlength 50.
+     * email: String, required, unique, lowercase, trim, regex validated (/^[^\s@]+@[^\s@]+\.[^\s@]+$/).
+     * password: String, required, minlength 8, select: false (excluded from queries by default).
+     * avatar: String, trim, default: auto-generated SVG via DiceBear avataaars.
+     * department: String, required, enum: DEPARTMENTS (Engineering, Design, Marketing, Sales, Product, Operations, HR, Finance).
+     * givingAllowance: Number, default 100, min 0, integer validation.
+     * earnedPoints: Number, default 0, min 0, integer validation.
+     * isEmailVerified: Boolean, default false.
+     * emailVerificationToken: String, select: false (SHA-256 hash).
+     * emailVerificationExpires: Date, select: false.
+     * passwordResetToken: String, select: false (SHA-256 hash).
+     * passwordResetExpires: Date, select: false.
+     * timestamps: true (createdAt, updatedAt).
+   - Indexes:
+     * { email: 1 } (Unique index).
+     * { department: 1, earnedPoints: -1 } (Compound index for department leaderboard queries).
+     * { earnedPoints: -1 } (Index for global recognition leaderboard ranking).
+   - Relationships:
+     * Referenced by Kudos (sender, receiver).
+     * Referenced by Reaction (user).
+     * Referenced by RefreshToken (user).
+     * Referenced by UserBadge (user).
+     * Referenced by PointTransaction (user).
+   - Validation & Security Rules:
+     * Pre-save hook hashes modified passwords with bcrypt (cost factor 12).
+     * Methods: comparePassword(candidate), createPasswordResetToken(), createEmailVerificationToken().
+     * toJSON and toObject transforms remove password, tokens, and __v from output.
+
+2. Kudos Model (D:\kudos-wall\backend\src\models\Kudos.js):
+   - Schema Fields & Defaults:
+     * sender: ObjectId ref 'User', required, indexed.
+     * receiver: ObjectId ref 'User', required, indexed.
+     * points: Number, required, integer, min 1, max 100 (preset tiers: 10, 20, 50).
+     * message: String, required, trim, minlength 3, maxlength 500.
+     * companyValueTags: [String], enum: COMPANY_VALUE_TAGS (#Teamwork, #CustomerObsession, #Innovation, #Excellence, #Integrity, #Leadership), required, min 1 tag, max 5 tags.
+     * timestamps: true (createdAt, updatedAt).
+   - Indexes:
+     * { createdAt: -1 } (Chronological feed index).
+     * { receiver: 1, createdAt: -1 } (Received kudos history for user profiles).
+     * { sender: 1, createdAt: -1 } (Sent kudos history for user profiles).
+     * { companyValueTags: 1 } (Value tag filtering in feed).
+   - Relationships:
+     * Virtual: 'reactions' referencing Reaction model (localField: '_id', foreignField: 'kudos').
+   - Validation & Security Rules:
+     * Pre-validate hook validates sender !== receiver (anti-self-gifting constraint).
+
+3. Reaction Model (D:\kudos-wall\backend\src\models\Reaction.js):
+   - Schema Fields & Defaults:
+     * user: ObjectId ref 'User', required, indexed.
+     * kudos: ObjectId ref 'Kudos', required, indexed.
+     * type: String, required, enum: REACTION_TYPES (+1, 👏, 🔥, ❤️, 🚀, 🎉).
+     * timestamps: true (createdAt, updatedAt).
+   - Indexes:
+     * { kudos: 1, user: 1, type: 1 } (Compound unique index preventing duplicate reaction of the same type by same user).
+     * { kudos: 1, type: 1 } (Compound index for grouping reactions by type on feed cards).
+   - Relationships:
+     * Child to Kudos (foreignField: 'kudos') and User (foreignField: 'user').
+
+4. RefreshToken Model (D:\kudos-wall\backend\src\models\RefreshToken.js):
+   - Schema Fields & Defaults:
+     * user: ObjectId ref 'User', required, indexed.
+     * tokenHash: String, required, unique, indexed (SHA-256 hash; plaintext tokens never stored).
+     * expiresAt: Date, required (7 days TTL).
+     * revoked: Boolean, default false, indexed.
+     * revokedAt: Date.
+     * replacedByTokenHash: String (tracks rotation lineage for replay attack detection).
+     * ipAddress: String, audit client IP.
+     * userAgent: String, audit browser / client UA.
+     * timestamps: true (createdAt, updatedAt).
+   - Indexes:
+     * { expiresAt: 1 }, expireAfterSeconds: 0 (MongoDB TTL index for automatic token cleanup).
+     * { user: 1, revoked: 1 } (Compound index for fast user token validation).
+   - Validation & Security Rules:
+     * Static helper: hashToken(rawToken) using crypto.createHash('sha256').
+     * Methods: isActive(), revoke(replacedByRawToken).
+
+5. Badge & UserBadge Models (D:\kudos-wall\backend\src\models\Badge.js & UserBadge.js):
+   - Badge Fields & Defaults:
+     * name: String, required, unique, max 60.
+     * code: String, required, unique, uppercase regex /^[A-Z0-9_]+$/.
+     * description: String, required, max 250.
+     * icon: String, required (Lucide icon identifier).
+     * category: String, required, enum: BADGE_CATEGORIES (milestone, values, giving, receiving).
+     * pointsBonus: Number, default 0, min 0.
+   - UserBadge Fields & Defaults:
+     * user: ObjectId ref 'User', required, indexed.
+     * badge: ObjectId ref 'Badge', required, indexed.
+     * earnedAt: Date, default Date.now.
+     * relatedKudos: ObjectId ref 'Kudos', optional trigger reference.
+   - Indexes:
+     * { user: 1, badge: 1 } (Unique index preventing duplicate badge awards).
+
+6. PointTransaction Model (Audit Ledger) (D:\kudos-wall\backend\src\models\PointTransaction.js):
+   - Schema Fields & Defaults:
+     * user: ObjectId ref 'User', required, indexed.
+     * type: String, required, enum: TRANSACTION_TYPES (ALLOWANCE_MONTHLY_RESET, KUDOS_SENT, KUDOS_RECEIVED, REWARD_REDEMPTION, ADMIN_ADJUSTMENT).
+     * wallet: String, required, enum: WALLET_TYPES (givingAllowance, earnedPoints).
+     * amount: Number, required non-zero integer (negative for debit, positive for credit).
+     * balanceBefore: Number, required, min 0 (snapshot before transfer).
+     * balanceAfter: Number, required, min 0 (snapshot after transfer; enforces no-overdraft).
+     * relatedKudos: ObjectId ref 'Kudos', indexed.
+     * description: String, required, max 250.
+     * status: String, enum: ['COMPLETED', 'ROLLED_BACK', 'FAILED'], default 'COMPLETED'.
+     * metadata: Mixed, default {}.
+     * timestamps: true (createdAt, updatedAt).
+   - Indexes:
+     * { user: 1, createdAt: -1 } (Statement history index).
+     * { user: 1, wallet: 1, createdAt: -1 } (Wallet-specific transaction history).
+     * { type: 1, createdAt: -1 } (Audit querying by transaction type).
+
+Files Created or Modified in Operation 2:
+- [CREATED] D:\kudos-wall\backend\src\config\constants.js
+- [CREATED] D:\kudos-wall\backend\src\models\User.js
+- [CREATED] D:\kudos-wall\backend\src\models\Kudos.js
+- [CREATED] D:\kudos-wall\backend\src\models\Reaction.js
+- [CREATED] D:\kudos-wall\backend\src\models\RefreshToken.js
+- [CREATED] D:\kudos-wall\backend\src\models\Badge.js
+- [CREATED] D:\kudos-wall\backend\src\models\UserBadge.js
+- [CREATED] D:\kudos-wall\backend\src\models\PointTransaction.js
+- [CREATED] D:\kudos-wall\backend\src\models\index.js
+- [CREATED] D:\kudos-wall\backend\tests\models.test.js
+- [UPDATED] D:\kudos-wall\backend\package.json
 
 Tests Performed:
-- Command: `npm test` (Jest in backend/)
-- Test Suites: 2 passed, 2 total (`health.test.js`, `models.test.js`)
-- Tests: 25 passed, 25 total (PASSED)
-- Linter: `npm run lint` in frontend/ -> 0 errors (PASSED)
-- Production Build: `npm run build` in frontend/ -> 0 errors (PASSED)
-
-Current Project Status:
-- Operations 0, 1, 2, and 3 are 100% completed, fully tested, and verified.
-- Monorepo repository: https://github.com/yashsonar1807/kudos-wall
-- Ready for Operation 4: Atomic Kudos Engine & Anti-Fraud Safety.
+- Command: npm test in backend/
+- Results: 25 / 25 model and schema tests passed (models.test.js & health.test.js).
 
 --------------------------------------------------------------------------------
 OPERATION 3: Dual-Token Auth System & Security Middleware
 --------------------------------------------------------------------------------
 Objective:
-- Implement signup with name, email, bcrypt password hashing, department enum, and optional avatar.
-- Implement email verification simulation (`POST /api/auth/verify-email`, `POST /api/auth/resend-verification`).
-- Implement login (`POST /api/auth/login`) with credential comparison, uniform 401 rejection, and httpOnly cookie delivery.
-- Implement logout (`POST /api/auth/logout`) with database-backed refresh token revocation and cookie clearing.
-- Issue short-lived JWT Access Token (15m) + long-lived Refresh Token (7d) with random crypto jti salt.
-- Store refresh tokens securely using deterministic SHA-256 hashes in MongoDB; never store plaintext tokens or passwords.
-- Implement strict Refresh Token Rotation and Replay Attack Detection (`POST /api/auth/refresh`), automatically revoking all user sessions upon detected replay.
-- Implement robust authentication middleware (`protect`, `requireEmailVerified`) supporting both httpOnly cookies and Authorization Bearer headers.
-- Implement authenticated user profile retrieval endpoint (`GET /api/auth/me`).
-- Author comprehensive integration tests for signup, email verification simulation, login, invalid credentials, protected routes, token rotation, replay attacks, and logout.
+- Build complete dual-token authentication system with short-lived JWT Access Token (15m) and long-lived Refresh Token (7d).
+- Deliver tokens securely via httpOnly cookies.
+- Support optional Authorization Bearer header for flexibility with external API clients and testing.
+- Implement Refresh Token Rotation and proactive Replay Attack Detection.
+- Implement email verification simulation.
+- Enforce strict server-side validation, password hashing, and error response envelopes.
 
-Files Created or Modified:
-- [CREATED] D:\kudos-wall\backend\src\services\tokenService.js (Token lifecycle, rotation, replay detection, httpOnly cookies)
-- [CREATED] D:\kudos-wall\backend\src\middleware\authMiddleware.js (Access token protection and email verification guards)
-- [CREATED] D:\kudos-wall\backend\src\middleware\validationMiddleware.js (Payload validation for signup, login, verification)
-- [CREATED] D:\kudos-wall\backend\src\controllers\authController.js (Signup, verification, login, logout, refresh, me handlers)
-- [CREATED] D:\kudos-wall\backend\src\routes\authRoutes.js (Express routing for /api/auth endpoints)
-- [UPDATED] D:\kudos-wall\backend\src\app.js (Mounted /api/auth routes)
-- [UPDATED] D:\kudos-wall\backend\src\middleware\errorMiddleware.js (Added JsonWebTokenError and TokenExpiredError handlers)
-- [CREATED] D:\kudos-wall\backend\tests\auth.test.js (Comprehensive integration test suite for authentication)
+Authentication Architecture:
+- Client (Browser) <--> httpOnly Cookies (accessToken: 15m, refreshToken: 7d) <--> Express Server
+- Stateless Access Token verification on every protected request via JWT secret.
+- Stateful Refresh Token validation via MongoDB RefreshToken collection with SHA-256 hashing.
+- Token Rotation on renewal: old token revoked with lineage pointer; new token issued.
+- Replay Detection: Re-use of a revoked token triggers instant revocation of ALL tokens for that user family.
+
+Auth API Endpoints:
+1. POST /api/auth/signup:
+   - Body: { name, email, password, department, [avatar] }
+   - Validation: name (2-50 chars), valid email regex, password >= 8 chars, valid department enum.
+   - Behavior: Rejects duplicate emails with 409 Conflict. Generates simulated email verification token. Hashes password with bcrypt. Sets httpOnly accessToken and refreshToken cookies. Returns 201 Created with sanitized user object and verification simulation instructions.
+2. POST /api/auth/verify-email:
+   - Body: { email, token }
+   - Behavior: Hashes candidate token with SHA-256, matches against stored hash, verifies expiry (< 24h). Sets isEmailVerified: true and clears verification tokens. Returns 200 OK.
+3. POST /api/auth/resend-verification:
+   - Body: { email }
+   - Behavior: Generates new 32-byte crypto verification token, updates user, returns simulation details.
+4. POST /api/auth/login:
+   - Body: { email, password }
+   - Behavior: Finds user (+password), compares with bcrypt. Returns 401 with uniform message on failure to prevent username enumeration. On success, generates 15m access token + 7d refresh token with random jti salt, stores SHA-256 hash in DB, sets httpOnly cookies, returns 200 OK with sanitized user.
+5. POST /api/auth/refresh:
+   - Source: Reads refreshToken from httpOnly cookie (fallback to request body).
+   - Behavior: Verifies token existence, matches SHA-256 hash in DB. If revoked, triggers REPLAY ATTACK DEFENSE (invalidates all active sessions for user, returns 403 Forbidden). If valid, rotates token (revokes old, issues new pair with jti salt), sets updated httpOnly cookies, returns 200 OK.
+6. POST /api/auth/logout:
+   - Source: Reads refreshToken from cookie/body.
+   - Behavior: Marks token revoked: true in MongoDB, clears accessToken and refreshToken cookies with matching path/domain options. Returns 200 OK.
+7. GET /api/auth/me:
+   - Middleware: protect
+   - Behavior: Verifies access token from httpOnly cookie or Authorization Bearer header, loads active user from DB, returns user profile, department, and recognition wallet allowances. Returns 401 if missing/invalid/expired.
+
+Cookie and Token Behavior:
+- Cookie Name: 'accessToken'
+  * Expiry: 15 minutes (maxAge: 15 * 60 * 1000)
+  * Flags: httpOnly: true, path: '/', sameSite: 'lax' ('strict' in prod), secure: (NODE_ENV === 'production')
+- Cookie Name: 'refreshToken'
+  * Expiry: 7 days (maxAge: 7 * 24 * 60 * 60 * 1000)
+  * Flags: httpOnly: true, path: '/', sameSite: 'lax' ('strict' in prod), secure: (NODE_ENV === 'production')
+- Global uniqueness: All refresh tokens embed a 16-byte random hex 'jti' payload claim preventing identical token strings and duplicate hash collisions during rapid consecutive calls.
+
+Security Measures:
+- Passwords hashed with bcryptjs (12 salt rounds); select: false prevents leakage in queries.
+- Password hashes and reset/verification tokens stripped via toJSON/toObject schema transforms.
+- Refresh tokens hashed with SHA-256; plaintext tokens never persisted in database.
+- Refresh token replay attack protection invalidates entire user token family on breach detection.
+- Secrets loaded strictly via process.env with safe development defaults; zero secrets hardcoded.
+- Helmet security headers and CORS origin checking enabled.
+- Authorization checks enforced strictly on server side; no reliance on client state.
+
+Files Created or Modified in Operation 3:
+- [CREATED] D:\kudos-wall\backend\src\services\tokenService.js
+- [CREATED] D:\kudos-wall\backend\src\middleware\authMiddleware.js
+- [CREATED] D:\kudos-wall\backend\src\middleware\validationMiddleware.js
+- [CREATED] D:\kudos-wall\backend\src\controllers\authController.js
+- [CREATED] D:\kudos-wall\backend\src\routes\authRoutes.js
+- [UPDATED] D:\kudos-wall\backend\src\app.js (Mounted /api/auth)
+- [UPDATED] D:\kudos-wall\backend\src\middleware\errorMiddleware.js (JWT exception handling)
+- [CREATED] D:\kudos-wall\backend\tests\auth.test.js (16 integration tests for auth)
 - [UPDATED] D:\kudos-wall\backend\package.json (Added jsonwebtoken dependency)
 
-Tests Performed:
-- Command: `npm test` (Jest in backend/)
-- Test Suites: 3 passed, 3 total (`health.test.js`, `models.test.js`, `auth.test.js`)
-- Tests: 41 passed, 41 total (100% PASSED)
-- Linter: `npm run lint` in frontend/ -> 0 errors (PASSED)
+Tests and Results:
+- Command: npm test in backend/
+- Test Suites: 3 passed, 3 total (health.test.js, models.test.js, auth.test.js)
+- Tests: 41 passed, 41 total (100% PASS RATE)
+  * Signup (valid, duplicate email rejection, validation errors)
+  * Simulated email verification (valid token, invalid token)
+  * Login (valid credentials, wrong password rejection, non-existent user rejection)
+  * Protected routes (cookie access, bearer header access, unauthenticated rejection, tampered rejection)
+  * Token refresh & rotation (successful rotation, replay attack detection & invalidation, missing token)
+  * Logout (server-side revocation, cookie clearing, invalidation of subsequent refresh)
+- Frontend Linting: oxlint -> 0 errors, 0 warnings
+- Frontend Build: vite build -> 0 errors
+
+Known Issues / Deferred Items:
+- None. System is in 100% verified state.
+- Note: Email verification uses simulated tokens as specified by Project Brief 03 (ready for real SMTP integration if desired).
+- Note: Forgot/Reset password workflow is intentionally deferred to subsequent operations as instructed.
 
 Current Project Status:
-- Operation 3: Dual-Token Auth System & Security Middleware completed and verified.
-- Ready for Operation 4: Atomic Kudos Engine & Anti-Fraud Safety.
+- Operation 0: Comprehensive Repository Inspection & Roadmap (COMPLETED)
+- Operation 1: Project Foundation & Scaffolding (COMPLETED)
+- Operation 2: Database Schemas & Data Layer (COMPLETED)
+- Operation 3: Dual-Token Auth System & Security Middleware (COMPLETED)
+- Git Repository: Pushed to origin/main (https://github.com/yashsonar1807/kudos-wall)
+
+================================================================================
+NEXT OPERATION: OPERATION 4 — Atomic Kudos Engine & Anti-Fraud Safety
+================================================================----------------
+Planned Objectives:
+- Implement Kudos creation workflow (POST /api/kudos) with point selector (10, 20, 50 pts).
+- Core company value tag validation (#Teamwork, #CustomerObsession, #Innovation).
+- Anti-fraud checks: sender givingAllowance balance guard, anti-self-gifting prevention.
+- Atomic point transfer using MongoDB transactions or atomic $inc with rollback safety.
+- Write corresponding records into PointTransaction audit ledger.
+- Author comprehensive unit & integration tests for transaction safety and race conditions.
+================================================================================
+SYSTEM BACKUP COMPLETED: 2026-09-29T10:56:00+05:30
 ================================================================================
 
 
