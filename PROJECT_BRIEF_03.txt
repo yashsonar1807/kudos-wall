@@ -1,0 +1,40 @@
+=== PAGE 1 ===
+MERN STACK EVALUATION • PROJECT BRIEF 03
+Internal Team Feedback & Peer Kudos Wall
+🔒  Universal Security & Architecture Requirements
+Pair Token Auth: Short-lived JWT Access Token (15m) + Long-lived Refresh Token (7d) in httpOnly
+cookies.
+Auth Features: Signup with Email Verification simulation, Login with token rotation, Forgot/Reset
+Password.
+UI Standard: Build all interface components using coss.com/ui primitives.
+1. Overview & Goal
+Create a company recognition platform where team members receive a monthly allowance of points to celebrate
+peers alongside core company values, featuring a social feed and live monthly leaderboards.
+2. Technical Feature Specifications
+A. User Profiles & Recognition Wallets
+User Schema: name , email , avatar , department , givingAllowance  (default: 100 pts/month), and
+earnedPoints  (default: 0).
+Profile page showing individual kudos history (received vs. sent) and earned recognition badges.
+B. "Give Kudos" Workflow & Point Transactions
+Modal with user autocomplete, point selector (10, 20, 50 pts), message field, and company value tag picker
+(#Teamwork, #CustomerObsession, #Innovation).
+Transaction Safety: Backend check ensuring sender has enough givingAllowance , prevention of self-gifting,
+and atomic point transfer.
+C. Social Kudos Feed
+Company feed displaying rich cards with sender/receiver avatars, point badges, and value tags.
+Feed pagination and infinite scrolling support.
+Emoji reactions (+1, 👏 , 🔥 ) with optimistic UI updates.
+D. Aggregated Leaderboard & Department Analytics
+MongoDB aggregation pipelines ( $group , $sort , $limit ) ranking top-recognized employees of the month.
+Filter rankings by department (Engineering, Design, Marketing, Sales).
+Monthly allowance reset logic to refresh all users' givingAllowance  to 100 points.
+3. Deliverables Checklist
+Area Deliverable Criteria
+Bonusly / Matter Alternative
+
+=== PAGE 2 ===
+Auth & Security Pair token JWT auth, secure cookies, email verification simulation.
+Logic & Safety Atomic point transactions, anti-fraud checks (no self-tipping/negative balance).
+Frontend Coss UI components, leaderboard rankings, feed with optimistic reactions.
+Repository Seed script ( npm run seed ) with dummy users/kudos, API docs.
+
