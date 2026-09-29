@@ -5,6 +5,7 @@ const cookieParser = require('cookie-parser');
 const morgan = require('morgan');
 const env = require('./config/env');
 const healthRoutes = require('./routes/healthRoutes');
+const authRoutes = require('./routes/authRoutes');
 const { notFoundHandler, errorHandler } = require('./middleware/errorMiddleware');
 const { sendSuccess } = require('./utils/apiResponse');
 
@@ -61,6 +62,7 @@ app.get('/', (req, res) => {
 
 // Mount Routes
 app.use('/api/health', healthRoutes);
+app.use('/api/auth', authRoutes);
 
 // 404 Catch-All & Error Handling Middleware
 app.use(notFoundHandler);

@@ -54,6 +54,20 @@ const errorHandler = (err, req, res, next) => {
     errorCode = 'MALFORMED_JSON';
   }
 
+  // Handle JWT Validation Errors
+  if (err.name === 'JsonWebTokenError') {
+    statusCode = 401;
+    message = 'Invalid authentication token';
+    errorCode = 'INVALID_TOKEN';
+  }
+
+  // Handle JWT Expiration
+  if (err.name === 'TokenExpiredError') {
+    statusCode = 401;
+    message = 'Access token expired';
+    errorCode = 'TOKEN_EXPIRED';
+  }
+
   return sendError(res, {
     message,
     statusCode,
