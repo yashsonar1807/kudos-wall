@@ -1,17 +1,11 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-
-const DEPARTMENTS = [
-  'Engineering',
-  'Design',
-  'Marketing',
-  'Sales',
-  'Product',
-  'Operations',
-  'HR',
-  'Finance',
-];
+const {
+  DEPARTMENTS,
+  DEFAULT_MONTHLY_ALLOWANCE,
+  DEFAULT_EARNED_POINTS,
+} = require('../config/constants');
 
 const userSchema = new mongoose.Schema(
   {
@@ -59,7 +53,7 @@ const userSchema = new mongoose.Schema(
     },
     givingAllowance: {
       type: Number,
-      default: 100,
+      default: DEFAULT_MONTHLY_ALLOWANCE,
       min: [0, 'Giving allowance cannot be negative'],
       validate: {
         validator: Number.isInteger,
@@ -68,7 +62,7 @@ const userSchema = new mongoose.Schema(
     },
     earnedPoints: {
       type: Number,
-      default: 0,
+      default: DEFAULT_EARNED_POINTS,
       min: [0, 'Earned points cannot be negative'],
       validate: {
         validator: Number.isInteger,

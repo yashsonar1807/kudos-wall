@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
-
-const BADGE_CATEGORIES = ['milestone', 'values', 'giving', 'receiving'];
+const { BADGE_CATEGORIES } = require('../config/constants');
 
 const badgeSchema = new mongoose.Schema(
   {

@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
-
-const REACTION_TYPES = ['+1', '👏', '🔥', '❤️', '🚀', '🎉'];
+const { REACTION_TYPES } = require('../config/constants');
 
 const reactionSchema = new mongoose.Schema(
   {

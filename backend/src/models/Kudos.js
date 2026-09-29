@@ -1,13 +1,5 @@
 const mongoose = require('mongoose');
-
-const COMPANY_VALUE_TAGS = [
-  '#Teamwork',
-  '#CustomerObsession',
-  '#Innovation',
-  '#Excellence',
-  '#Integrity',
-  '#Leadership',
-];
+const { COMPANY_VALUE_TAGS } = require('../config/constants');
 
 const kudosSchema = new mongoose.Schema(
   {

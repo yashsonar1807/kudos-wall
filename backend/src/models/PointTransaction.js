@@ -1,14 +1,5 @@
 const mongoose = require('mongoose');
-
-const TRANSACTION_TYPES = [
-  'ALLOWANCE_MONTHLY_RESET',
-  'KUDOS_SENT',
-  'KUDOS_RECEIVED',
-  'REWARD_REDEMPTION',
-  'ADMIN_ADJUSTMENT',
-];
-
-const WALLET_TYPES = ['givingAllowance', 'earnedPoints'];
+const { TRANSACTION_TYPES, WALLET_TYPES } = require('../config/constants');
 
 const pointTransactionSchema = new mongoose.Schema(
   {
